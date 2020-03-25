@@ -1,15 +1,16 @@
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { registerJoystreamTypes } from '@joystream/types';
 import { Keyring } from '@polkadot/keyring';
-import { UserInfo } from '@joystream/types/lib/members';
+import { UserInfo, PaidMembershipTerms } from '@joystream/types/lib/members';
 import { assert } from 'chai';
 import BN from 'bn.js';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
 import { KeyringPair } from '@polkadot/keyring/types';
 
 let api: ApiPromise;
-//let nonce: BN;
 let keyring: Keyring;
+let alice: KeyringPair;
+let bob: KeyringPair;
 
 describe('Membership integration tests', function() {
   before(async function() {
@@ -20,9 +21,9 @@ describe('Membership integration tests', function() {
   });
 
   it('Buy membeship is accepted with sufficient funds and rejected with insufficient', async function() {
-    const alice = keyring.addFromUri('//Alice');
-    const bob = keyring.addFromUri('//Bob');
-
+    alice = keyring.addFromUri('//Alice');
+    bob = keyring.addFromUri('//Bob');
+    await signAndSend(api.tx.balances.transfer(bob.address, 2), alice);
     await signAndSend(
       api.tx.members.buyMembership(
         0,
@@ -34,21 +35,22 @@ describe('Membership integration tests', function() {
       alice.address
     );
     assert(!aliceMembership.isEmpty, 'Alice is not a member');
-    //TODO ensure bob's balance is insufficient to buy membership but sufficient to pay fee
+    //TODO ensure bob's balance is insufficient to buy membership
     await signAndSend(
       api.tx.members.buyMembership(
         0,
         new UserInfo({ handle: 'bob_member', avatar_uri: '', about: '' })
       ),
-      bob
+      bob,
+      true
     );
     let bobMembership = await api.query.members.memberIdByAccountId(
       bob.address
     );
     assert(bobMembership.isEmpty, 'Bob is a member');
-    //TODO membership cost and estimated fee should be retrived from chain
-    await signAndSend(api.tx.balances.transfer(bob.address, 200), alice);
-    //TODO ensure bob's balance is insufficient to buy membership
+    //TODO membership cost should be retrived from chain
+    await signAndSend(api.tx.balances.transfer(bob.address, 100), alice);
+    //TODO ensure bob's balance is sufficient to buy membership
     await signAndSend(
       api.tx.members.buyMembership(
         0,
@@ -67,7 +69,8 @@ describe('Membership integration tests', function() {
 
 async function signAndSend(
   tx: SubmittableExtrinsic<'promise'>,
-  account: KeyringPair
+  account: KeyringPair,
+  expectFailure = false
 ) {
   await new Promise(async (resolve, reject) => {
     let nonce = await getNonce(account, api);
@@ -76,19 +79,21 @@ async function signAndSend(
     console.log('tx signed for ' + account.address);
     await signedTx
       .send(async result => {
-        console.log('status ' + result.status);
-        if (result.status.isFinalized == true) {
-          console.log('tx succeed');
-          resolve(true);
-        } else if (result.status.isInvalid) {
-          console.log('tx is invalid');
-          resolve(true);
+        if (result.status.isFinalized == true && result.events != undefined) {
+          result.events.forEach(event => {
+            if (event.event.method == 'ExtrinsicFailed') {
+              if (expectFailure) {
+                resolve();
+              } else {
+                reject(new Error('Extrinsic failed unexpectedly'));
+              }
+            }
+          });
+          resolve();
         }
       })
       .catch(error => {
-        console.log('error during tx sending');
-        resolve(true);
-        // reject(error);
+        reject(error);
       });
   });
 }
