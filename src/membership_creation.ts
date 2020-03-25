@@ -8,7 +8,7 @@ import { SubmittableExtrinsic } from '@polkadot/api/types';
 import { KeyringPair } from '@polkadot/keyring/types';
 
 let api: ApiPromise;
-let nonce: BN;
+//let nonce: BN;
 let keyring: Keyring;
 
 describe('Membership integration tests', function() {
@@ -17,10 +17,6 @@ describe('Membership integration tests', function() {
     const provider = new WsProvider('ws://127.0.0.1:9944');
     api = await ApiPromise.create({ provider });
     keyring = new Keyring({ type: 'sr25519' });
-    let nonceString = (
-      await api.query.system.accountNonce(keyring.addFromUri('//Alice').address)
-    ).toString();
-    nonce = new BN(nonceString);
   });
 
   it('Buy membeship is accepted with sufficient funds and rejected with insufficient', async function() {
@@ -32,10 +28,8 @@ describe('Membership integration tests', function() {
         0,
         new UserInfo({ handle: 'alice_member', avatar_uri: '', about: '' })
       ),
-      alice,
-      nonce
+      alice
     );
-    nonce = nonce.add(new BN(1));
     let aliceMembership = await api.query.members.memberIdByAccountId(
       alice.address
     );
@@ -46,27 +40,25 @@ describe('Membership integration tests', function() {
         0,
         new UserInfo({ handle: 'bob_member', avatar_uri: '', about: '' })
       ),
-      bob,
-      nonce
+      bob
     );
     let bobMembership = await api.query.members.memberIdByAccountId(
       bob.address
     );
     assert(bobMembership.isEmpty, 'Bob is a member');
     //TODO membership cost and estimated fee should be retrived from chain
-    await signAndSend(api.tx.balances.transfer(bob.address, 200), alice, nonce);
+    await signAndSend(api.tx.balances.transfer(bob.address, 200), alice);
     //TODO ensure bob's balance is insufficient to buy membership
     await signAndSend(
       api.tx.members.buyMembership(
         0,
         new UserInfo({ handle: 'bob_member', avatar_uri: '', about: '' })
       ),
-      bob,
-      nonce
+      bob
     );
     bobMembership = await api.query.members.memberIdByAccountId(bob.address);
     assert(!bobMembership.isEmpty, 'Bob is a not member');
-  }).timeout(30000);
+  }).timeout(60000);
 
   after(function() {
     api.disconnect();
@@ -75,14 +67,16 @@ describe('Membership integration tests', function() {
 
 async function signAndSend(
   tx: SubmittableExtrinsic<'promise'>,
-  account: KeyringPair,
-  nonce: BN
+  account: KeyringPair
 ) {
   await new Promise(async (resolve, reject) => {
+    let nonce = await getNonce(account, api);
     const signedTx = tx.sign(account, { nonce });
 
-    await tx
+    console.log('tx signed for ' + account.address);
+    await signedTx
       .send(async result => {
+        console.log('status ' + result.status);
         if (result.status.isFinalized == true) {
           console.log('tx succeed');
           resolve(true);
@@ -93,7 +87,15 @@ async function signAndSend(
       })
       .catch(error => {
         console.log('error during tx sending');
-        reject(error);
+        resolve(true);
+        // reject(error);
       });
   });
+}
+
+async function getNonce(account: KeyringPair, api: ApiPromise) {
+  let nonceString = (
+    await api.query.system.accountNonce(account.address)
+  ).toString();
+  return new BN(nonceString);
 }
