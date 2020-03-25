@@ -5,7 +5,6 @@ import { UserInfo } from '@joystream/types/lib/members';
 import { assert } from 'chai';
 import { KeyringPair } from '@polkadot/keyring/types';
 import { signAndSend, getNonce } from './utils';
-import BN = require('bn.js');
 
 let api: ApiPromise;
 let keyring: Keyring;
@@ -21,31 +20,19 @@ describe('Membership integration tests', function() {
   it('Buy membeship is accepted with sufficient funds and rejected with insufficient', async function() {
     let alice = keyring.addFromUri('//Alice');
     let bob = keyring.addFromUri('//Bob');
-    await signAndSend(
-      api.tx.balances.transfer(bob.address, 2),
-      alice,
-      await getNonce(alice, api)
-    );
-    await buyMembership(api, alice, new BN(0), 'alice_member');
-    let aliceMembership = await api.query.members.memberIdByAccountId(
-      alice.address
-    );
+    await transferBalance(api, alice, bob.address, 2);
+    await buyMembership(api, alice, 0, 'alice_member');
+    let aliceMembership = await getMembership(alice.address);
     assert(!aliceMembership.isEmpty, 'Alice is not a member');
     //TODO ensure bob's balance is insufficient to buy membership
-    await buyMembership(api, bob, new BN(0), 'bob_member', true);
-    let bobMembership = await api.query.members.memberIdByAccountId(
-      bob.address
-    );
+    await buyMembership(api, bob, 0, 'bob_member', true);
+    let bobMembership = await getMembership(bob.address);
     assert(bobMembership.isEmpty, 'Bob is a member');
     //TODO membership cost should be retrived from chain
-    await signAndSend(
-      api.tx.balances.transfer(bob.address, 100),
-      alice,
-      await getNonce(alice, api)
-    );
+    await transferBalance(api, alice, bob.address, 100);
     //TODO ensure bob's balance is sufficient to buy membership
-    await buyMembership(api, bob, new BN(0), 'bob_member');
-    bobMembership = await api.query.members.memberIdByAccountId(bob.address);
+    await buyMembership(api, bob, 0, 'bob_member');
+    bobMembership = await getMembership(bob.address);
     assert(!bobMembership.isEmpty, 'Bob is a not member');
   }).timeout(60000);
 
@@ -57,11 +44,11 @@ describe('Membership integration tests', function() {
 async function buyMembership(
   api: ApiPromise,
   account: KeyringPair,
-  paidTerms: BN,
-  name: String,
+  paidTerms: number,
+  name: string,
   expectFailure = false
 ) {
-  await signAndSend(
+  return signAndSend(
     api.tx.members.buyMembership(
       paidTerms,
       new UserInfo({ handle: name, avatar_uri: '', about: '' })
@@ -69,5 +56,22 @@ async function buyMembership(
     account,
     await getNonce(account, api),
     expectFailure
+  );
+}
+
+async function getMembership(address: string) {
+  return api.query.members.memberIdByAccountId(address);
+}
+
+async function transferBalance(
+  api: ApiPromise,
+  from: KeyringPair,
+  to: string,
+  amount: number
+) {
+  return signAndSend(
+    api.tx.balances.transfer(to, amount),
+    from,
+    await getNonce(from, api)
   );
 }
