@@ -9,11 +9,10 @@ export class Utils {
     account: KeyringPair,
     nonce: BN,
     expectFailure = false
-  ) {
+  ): Promise<void> {
     return new Promise(async (resolve, reject) => {
       const signedTx = tx.sign(account, { nonce });
 
-      console.log('tx signed for ' + account.address);
       await signedTx
         .send(async result => {
           if (result.status.isFinalized == true && result.events != undefined) {
@@ -35,10 +34,12 @@ export class Utils {
     });
   }
 
-  public static async getNonce(account: KeyringPair, api: ApiPromise) {
-    let nonceString = (
-      await api.query.system.accountNonce(account.address)
-    ).toString();
-    return new BN(nonceString);
+  public static async getNonce(
+    api: ApiPromise,
+    account: KeyringPair
+  ): Promise<BN> {
+    return api.query.system
+      .accountNonce(account.address)
+      .then(nonce => new BN(nonce.toString()));
   }
 }
