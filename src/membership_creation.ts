@@ -16,8 +16,10 @@ describe('Membership integration tests', function() {
   let nKeyPairs: Array<KeyringPair>;
   let aKeyPair: KeyringPair;
   const N: number = 1;
+  let membershipFee: number;
 
   before(async function() {
+    this.timeout(30000);
     registerJoystreamTypes();
     const provider = new WsProvider('ws://127.0.0.1:9944');
     api = await ApiPromise.create({ provider });
@@ -27,10 +29,7 @@ describe('Membership integration tests', function() {
       nKeyPairs.push(keyring.addFromUri(i.toString()));
     }
     aKeyPair = keyring.addFromUri('A');
-  });
-
-  it('Buy membeship is accepted with sufficient funds and rejected with insufficient', async function() {
-    let membershipFee = (
+    membershipFee = (
       await api.query.members.paidMembershipTermsById<
         Option<PaidMembershipTerms>
       >(0)
@@ -54,39 +53,48 @@ describe('Membership integration tests', function() {
     );
     nonce = nonce.add(new BN(1));
     await transferBalance(api, alice, aKeyPair.address, 2, nonce);
+  });
 
+  it('Buy membeship is accepted with sufficient funds', async function() {
     await Promise.all(
       nKeyPairs.map(async keyPair => {
         await buyMembership(api, keyPair, 0, 'new_member');
       })
-    ).then(() => {
-      nKeyPairs.map(async keyPair => {
-        let keyPairMembership = await getMembership(keyPair.address);
-        assert(!keyPairMembership.isEmpty, 'Account m is not a member');
-      });
+    );
+    nKeyPairs.map(async keyPair => {
+      let keyPairMembership = await getMembership(keyPair.address);
+      assert(!keyPairMembership.isEmpty, 'Account m is not a member');
     });
+  }).timeout(30000);
 
+  it('Accont A has insufficient funds to buy membership', async function() {
     let accountBalance = (await getBalance(aKeyPair.address)).toNumber();
     assert(
       accountBalance < membershipFee,
       'Account A already have sufficient balance to purchase membership'
     );
+  }).timeout(30000);
 
+  it('Account A can not buy the membership with insufficient funds', async function() {
     await buyMembership(api, aKeyPair, 0, 'late_member', true);
     let aMembership = await getMembership(aKeyPair.address);
     assert(aMembership.isEmpty, 'Account A is a member');
+  }).timeout(30000);
 
+  it('Account A has been provided with funds to buy the membership', async function() {
     await transferBalance(api, alice, aKeyPair.address, membershipFee);
-    accountBalance = (await getBalance(aKeyPair.address)).toNumber();
+    let accountBalance = (await getBalance(aKeyPair.address)).toNumber();
     assert(
       accountBalance >= membershipFee,
       'The account balance is insufficient to purchase membership'
     );
+  }).timeout(30000);
 
+  it('Account A was able to buy the membership', async function() {
     await buyMembership(api, aKeyPair, 0, 'late_member');
-    aMembership = await getMembership(aKeyPair.address);
+    let aMembership = await getMembership(aKeyPair.address);
     assert(!aMembership.isEmpty, 'Account A is a not member');
-  }).timeout(60000);
+  }).timeout(30000);
 
   after(function() {
     api.disconnect();
