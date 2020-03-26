@@ -7,20 +7,26 @@ import { KeyringPair } from '@polkadot/keyring/types';
 import { Utils } from './utils';
 import { Option } from '@polkadot/types';
 import { Balance } from '@polkadot/types/interfaces';
+import BN = require('bn.js');
 
 describe('Membership integration tests', function() {
   let api: ApiPromise;
   const keyring = new Keyring({ type: 'sr25519' });
   let alice: KeyringPair;
-  let keyPairs: Array<KeyringPair>;
+  let nKeyPairs: Array<KeyringPair>;
+  let aKeyPair: KeyringPair;
+  const N: number = 1;
 
   before(async function() {
     registerJoystreamTypes();
     const provider = new WsProvider('ws://127.0.0.1:9944');
     api = await ApiPromise.create({ provider });
     alice = keyring.addFromUri('//Alice');
-    keyPairs = new Array();
-    keyPairs.push(keyring.addFromUri('1'));
+    nKeyPairs = new Array();
+    for (let i = 0; i < N; i++) {
+      nKeyPairs.push(keyring.addFromUri(i.toString()));
+    }
+    aKeyPair = keyring.addFromUri('A');
   });
 
   it('Buy membeship is accepted with sufficient funds and rejected with insufficient', async function() {
@@ -31,27 +37,55 @@ describe('Membership integration tests', function() {
     )
       .unwrap()
       .fee.toNumber();
-    await transferBalance(api, alice, keyPairs[0].address, 2);
-    await buyMembership(api, alice, 0, 'alice_member');
-    let aliceMembership = await getMembership(alice.address);
-    assert(!aliceMembership.isEmpty, 'Alice is not a member');
-    let accountBalance = (await getBalance(keyPairs[0].address)).toNumber();
+
+    let nonce = await Utils.getNonce(alice, api);
+    nonce = nonce.sub(new BN(1));
+    await Promise.all(
+      nKeyPairs.map(async keyPair => {
+        nonce = nonce.add(new BN(1));
+        await transferBalance(
+          api,
+          alice,
+          keyPair.address,
+          membershipFee + 1,
+          nonce
+        );
+      })
+    );
+    nonce = nonce.add(new BN(1));
+    await transferBalance(api, alice, aKeyPair.address, 2, nonce);
+
+    await Promise.all(
+      nKeyPairs.map(async keyPair => {
+        await buyMembership(api, keyPair, 0, 'new_member');
+      })
+    ).then(() => {
+      nKeyPairs.map(async keyPair => {
+        let keyPairMembership = await getMembership(keyPair.address);
+        assert(!keyPairMembership.isEmpty, 'Account m is not a member');
+      });
+    });
+
+    let accountBalance = (await getBalance(aKeyPair.address)).toNumber();
     assert(
       accountBalance < membershipFee,
-      'The account already have sufficient balance to purchase membership'
+      'Account A already have sufficient balance to purchase membership'
     );
-    await buyMembership(api, keyPairs[0], 0, 'charlie_member', true);
-    let charlieMembership = await getMembership(keyPairs[0].address);
-    assert(charlieMembership.isEmpty, 'Charlie is a member');
-    await transferBalance(api, alice, keyPairs[0].address, membershipFee);
-    accountBalance = (await getBalance(keyPairs[0].address)).toNumber();
+
+    await buyMembership(api, aKeyPair, 0, 'late_member', true);
+    let aMembership = await getMembership(aKeyPair.address);
+    assert(aMembership.isEmpty, 'Account A is a member');
+
+    await transferBalance(api, alice, aKeyPair.address, membershipFee);
+    accountBalance = (await getBalance(aKeyPair.address)).toNumber();
     assert(
       accountBalance >= membershipFee,
       'The account balance is insufficient to purchase membership'
     );
-    await buyMembership(api, keyPairs[0], 0, 'charlie_member');
-    charlieMembership = await getMembership(keyPairs[0].address);
-    assert(!charlieMembership.isEmpty, 'Charlie is a not member');
+
+    await buyMembership(api, aKeyPair, 0, 'late_member');
+    aMembership = await getMembership(aKeyPair.address);
+    assert(!aMembership.isEmpty, 'Account A is a not member');
   }).timeout(60000);
 
   after(function() {
@@ -88,12 +122,14 @@ describe('Membership integration tests', function() {
     api: ApiPromise,
     from: KeyringPair,
     to: string,
-    amount: number
+    amount: number,
+    nonce: BN = new BN(-1)
   ) {
+    let _nonce = nonce.isNeg() ? await Utils.getNonce(from, api) : nonce;
     return Utils.signAndSend(
       api.tx.balances.transfer(to, amount),
       from,
-      await Utils.getNonce(from, api)
+      _nonce
     );
   }
 });
