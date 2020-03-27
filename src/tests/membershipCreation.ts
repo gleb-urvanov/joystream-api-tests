@@ -7,12 +7,12 @@ import BN = require('bn.js');
 import { ApiMethods } from '../utils/apiMethods';
 import { initConfig } from '../utils/config';
 
-describe('Membership integration tests', function() {
+describe('Membership integration tests', () => {
   initConfig();
   let apiMethods: ApiMethods;
   const keyring = new Keyring({ type: 'sr25519' });
   let sudo: KeyringPair;
-  let nKeyPairs: Array<KeyringPair> = new Array();
+  const nKeyPairs: KeyringPair[] = new Array();
   let aKeyPair: KeyringPair;
   const N: number = +process.env.MEMBERSHIP_CREATION_N!;
   let membershipFee: number;
@@ -39,7 +39,7 @@ describe('Membership integration tests', function() {
     await apiMethods.transferBalance(sudo, aKeyPair.address, 2);
   });
 
-  it('Buy membeship is accepted with sufficient funds', async function() {
+  it('Buy membeship is accepted with sufficient funds', async () => {
     await Promise.all(
       nKeyPairs.map(async keyPair => {
         await apiMethods.buyMembership(keyPair, 0, 'new_member');
@@ -54,7 +54,7 @@ describe('Membership integration tests', function() {
     );
   }).timeout(30000);
 
-  it('Accont A has insufficient funds to buy membership', async function() {
+  it('Accont A has insufficient funds to buy membership', async () => {
     apiMethods
       .getBalance(aKeyPair.address)
       .then(balance =>
@@ -65,14 +65,14 @@ describe('Membership integration tests', function() {
       );
   }).timeout(30000);
 
-  it('Account A can not buy the membership with insufficient funds', async function() {
+  it('Account A can not buy the membership with insufficient funds', async () => {
     await apiMethods.buyMembership(aKeyPair, 0, 'late_member', true);
     apiMethods
       .getMembership(aKeyPair.address)
       .then(membership => assert(membership.isEmpty, 'Account A is a member'));
   }).timeout(30000);
 
-  it('Account A has been provided with funds to buy the membership', async function() {
+  it('Account A has been provided with funds to buy the membership', async () => {
     await apiMethods.transferBalance(sudo, aKeyPair.address, membershipFee);
     apiMethods
       .getBalance(aKeyPair.address)
@@ -84,7 +84,7 @@ describe('Membership integration tests', function() {
       );
   }).timeout(30000);
 
-  it('Account A was able to buy the membership', async function() {
+  it('Account A was able to buy the membership', async () => {
     await apiMethods.buyMembership(aKeyPair, 0, 'late_member');
     apiMethods
       .getMembership(aKeyPair.address)
@@ -93,7 +93,7 @@ describe('Membership integration tests', function() {
       );
   }).timeout(30000);
 
-  after(function() {
+  after(() => {
     apiMethods.close();
   });
 });

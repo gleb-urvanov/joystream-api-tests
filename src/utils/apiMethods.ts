@@ -52,7 +52,7 @@ export class ApiMethods {
     amount: number,
     nonce: BN = new BN(-1)
   ): Promise<void> {
-    let _nonce = nonce.isNeg() ? await this.getNonce(from) : nonce;
+    const _nonce = nonce.isNeg() ? await this.getNonce(from) : nonce;
     return Utils.signAndSend(
       this.api.tx.balances.transfer(to, amount),
       from,
@@ -76,7 +76,7 @@ export class ApiMethods {
 
   public async transferBalanceToAccounts(
     from: KeyringPair,
-    to: Array<KeyringPair>,
+    to: KeyringPair[],
     amount: number,
     nonce: BN
   ): Promise<void[]> {
