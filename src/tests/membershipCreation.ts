@@ -4,37 +4,39 @@ import { Keyring } from '@polkadot/keyring';
 import { assert } from 'chai';
 import { KeyringPair } from '@polkadot/keyring/types';
 import BN = require('bn.js');
-import { ApiMethods } from '../apiMethods';
+import { ApiMethods } from '../utils/apiMethods';
+import { initConfig } from '../utils/config';
 
 describe('Membership integration tests', function() {
+  initConfig();
   let apiMethods: ApiMethods;
   const keyring = new Keyring({ type: 'sr25519' });
-  let alice: KeyringPair;
+  let sudo: KeyringPair;
   let nKeyPairs: Array<KeyringPair> = new Array();
   let aKeyPair: KeyringPair;
-  const N: number = 1;
+  const N: number = +process.env.MEMBERSHIP_CREATION_N!;
   let membershipFee: number;
 
   before(async function() {
     this.timeout(30000);
     registerJoystreamTypes();
-    const provider = new WsProvider('ws://127.0.0.1:9944');
+    const provider = new WsProvider(process.env.NODE_URL);
     apiMethods = await ApiMethods.create(provider);
-    alice = keyring.addFromUri('//Alice');
+    sudo = keyring.addFromUri(process.env.SUDO_ACCOUNT_URL!);
     for (let i = 0; i < N; i++) {
       nKeyPairs.push(keyring.addFromUri(i.toString()));
     }
     aKeyPair = keyring.addFromUri('A');
     membershipFee = await apiMethods.getMembershipFee(0);
-    let nonce = await apiMethods.getNonce(alice);
+    let nonce = await apiMethods.getNonce(sudo);
     nonce = nonce.sub(new BN(1));
     await apiMethods.transferBalanceToAccounts(
-      alice,
+      sudo,
       nKeyPairs,
       membershipFee + 1,
       nonce
     );
-    await apiMethods.transferBalance(alice, aKeyPair.address, 2);
+    await apiMethods.transferBalance(sudo, aKeyPair.address, 2);
   });
 
   it('Buy membeship is accepted with sufficient funds', async function() {
@@ -71,7 +73,7 @@ describe('Membership integration tests', function() {
   }).timeout(30000);
 
   it('Account A has been provided with funds to buy the membership', async function() {
-    await apiMethods.transferBalance(alice, aKeyPair.address, membershipFee);
+    await apiMethods.transferBalance(sudo, aKeyPair.address, membershipFee);
     apiMethods
       .getBalance(aKeyPair.address)
       .then(balance =>
