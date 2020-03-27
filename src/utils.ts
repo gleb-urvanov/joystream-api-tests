@@ -1,6 +1,5 @@
 import { KeyringPair } from '@polkadot/keyring/types';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
-import { ApiPromise } from '@polkadot/api';
 import BN = require('bn.js');
 
 export class Utils {
@@ -32,14 +31,5 @@ export class Utils {
           reject(error);
         });
     });
-  }
-
-  public static async getNonce(
-    api: ApiPromise,
-    account: KeyringPair
-  ): Promise<BN> {
-    return api.query.system
-      .accountNonce(account.address)
-      .then(nonce => new BN(nonce.toString()));
   }
 }

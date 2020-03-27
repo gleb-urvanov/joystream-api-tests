@@ -6,7 +6,7 @@
     "build": "tsc --build tsconfig.json",
     "status": "node lib/status",
     "get-code": "node lib/get-code",
-    "test": "mocha -r ts-node/register src/membership_creation.ts"
+    "test": "mocha -r ts-node/register src/tests/*"
   },
   "dependencies": {
     "@joystream/types": "^0.6.0",
